@@ -3,16 +3,35 @@ import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { Octokit } from "octokit";
+
+// Context from the auth process, encrypted & stored in the auth token
+// and provided to the DurableMCP as this.props
+type Props = {
+  login: string;
+  name: string;
+  email: string;
+  accessToken: string;
+};
 
 // Define our MCP agent with tools
-export class MyMCP extends McpAgent {
+export class MyMCP extends McpAgent<Env, {}, Props> {
+  private readonly allowedUsernames = new Set<string>();
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    this.allowedUsernames = new Set(env.ALLOWED_USERNAMES.split(","));
+  }
+
   server = new McpServer({
     name: "Authless Calculator",
     version: "1.0.0",
   });
 
   async init() {
+    if (!this.allowedUsernames.has(this.props.login)) {
+      throw new Error("Unauthorized");
+    }
+
     // Simple addition tool
     this.server.tool(
       "add",
